@@ -1,18 +1,18 @@
 from fastmcp import Client as MCPClient
-import ollama
+from openai import OpenAI
 import json
 import logging
-import os
 
 logger = logging.getLogger(__name__)
 
 
 class AIKun:
-    def __init__(self, ollama_url: str, model: str, session_manager=None):
-        self.ollama_url = ollama_url
+    def __init__(self, server_url: str, api_key, model: str, session_manager=None):
+        self.server_url = server_url
         self.model = model
         self.session_manager = session_manager
-        self.ollama_tools = []
+        self.client = OpenAI(base_url=server_url, api_key=api_key)
+        self.tools = []
         self.url_to_tool = {}
         self.mcps = []
 
@@ -26,7 +26,7 @@ class AIKun:
             tools_list = await mcp.list_tools()
             for tool in tools_list:
                 self.url_to_tool[tool.name] = mcp_url
-                self.ollama_tools.append({
+                self.tools.append({
                     "type": "function",
                     "function": {
                         "name": tool.name,
@@ -36,18 +36,21 @@ class AIKun:
                 })
 
     async def clear_mcps(self):
-        self.ollama_tools = []
+        self.tools = []
         self.url_to_tool = {}
 
-    async def handle_tools(self, tools: list):
+    async def handle_tools(self, tool_calls: list):
         messages = []
-        for tool_call in tools:
+        for tc in tool_calls:
+            tool_name = tc.function.name
+            tool_args = json.loads(tc.function.arguments)
             tool_response = await self.call_tool(
-                self.url_to_tool[tool_call["function"]["name"]],
-                tool_call["function"]["name"],
-                tool_call["function"]["arguments"]
+                self.url_to_tool[tool_name],
+                tool_name,
+                tool_args
             )
             messages.append({
+                "tool_call_id": tc.id,
                 "role": "tool",
                 "content": json.dumps(tool_response) if isinstance(tool_response, dict) else str(tool_response),
             })
@@ -66,34 +69,34 @@ class AIKun:
         return response
 
     async def query(self, prompt: str, session: str=None):
-        response = ollama.chat(
+        response = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
-            tools=self.ollama_tools,
-            stream=False,
+            tools=self.tools,
         )
 
-        if not response.get("message", {}).get("tool_calls"):
-            return await self.parse_response(response, session)
+        msg = response.choices[0].message
+        if not msg.tool_calls:
+            return await self.parse_response(msg, session)
 
         messages = [
             {"role": "user", "content": prompt},
-            {"role": "assistant", "content": response["message"]["content"]}
+            {"role": "assistant", "content": msg.content or "", "tool_calls": msg.tool_calls}
         ]
 
-        messages += await self.handle_tools(response["message"]["tool_calls"])
+        messages += await self.handle_tools(msg.tool_calls)
 
-        followup_response = ollama.chat(
+        followup_response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
         )
 
-        return await self.parse_response(followup_response, session)
+        return await self.parse_response(followup_response.choices[0].message, session)
 
     async def get_models(self):
         try:
-            response = ollama.list()
-            return response.get("models", [])
+            models = self.client.models.list().data
+            return [m.id for m in models]
         except Exception as e:
-            logger.error(f"Failed to fetch models from Ollama: {e}")
+            logger.error(f"Failed to fetch models from server: {e}")
             return []

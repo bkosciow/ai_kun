@@ -1,4 +1,20 @@
-AI Assistant framework for Ollama. Uses MCP tools
+AI Assistant framework for Ollama. Uses MCP tools (fastmcp)
+
+
+config.ini:
+
+
+```
+[assistant]
+server_url=http://192.168.1.40:11434
+apikey=fake
+model=qwen
+mcp_servers=[
+    "http://192.168.1.40:11000/mcp"
+    ]
+
+```
+
 
 1. use AIKun directly:
 
@@ -18,7 +34,8 @@ config = Config('config.ini')
 
 async def main(content):
     assistant = AIKun(
-        config.get('assistant.ollama_url'),
+        config.get('assistant.server_url'),
+        config.get('assistant.server_key'),
         config.get('assistant.model')
     )
 
@@ -51,7 +68,8 @@ import uvicorn
 async def main():
     config = Config('config.ini')
     await init_server(
-        config.get('assistant.ollama_url'),
+        config.get('assistant.server_url'),
+        config.get('assistant.server_key'),
         config.get('assistant.model'),
         config.get_list('assistant.mcp_servers')
     )

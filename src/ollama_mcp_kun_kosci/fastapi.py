@@ -1,5 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, status
-import asyncio
+from fastapi import FastAPI, HTTPException, status
 from ollama_mcp_kun_kosci.aikun import AIKun
 from pydantic import BaseModel
 from typing import Optional
@@ -12,12 +11,11 @@ class PromptRequest(BaseModel):
 
 app = FastAPI()
 assistant = None
-ollama_lock = asyncio.Lock()
 
 
-async def init_server(ollama_url: str, ollama_model: str, mcps: dict):
+async def init_server(server_url: str, apikey: str, model: str, mcps: list):
     global assistant
-    assistant = AIKun(ollama_url, ollama_model)
+    assistant = AIKun(server_url, apikey, model)
     await assistant.load_mcps(mcps)
 
 
@@ -26,7 +24,7 @@ async def chat(request: PromptRequest):
     if not assistant:
         raise HTTPException(status_code=500, detail="Assistant not initialized")
     try:
-        response = await assistant.query(request.prompt)
-        return {"response": response['message']}
+        msg = await assistant.query(request.prompt)
+        return {"response": {"role": msg.role, "content": msg.content}}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
