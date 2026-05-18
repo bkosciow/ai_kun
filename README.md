@@ -1,4 +1,4 @@
-AI Assistant framework for Ollama. Uses MCP tools (fastmcp)
+AI Assistant framework for OpenAI compatible llms. Uses MCP tools (fastmcp)
 
 
 config.ini:
@@ -20,7 +20,7 @@ mcp_servers=[
 
 
 ```
-from ollama_mcp_kun_kosci.aikun import AIKun
+from ai_kun_kosci.aikun import AIKun
 from node_listener.service.config import Config
 import asyncio
 import logging
@@ -59,7 +59,7 @@ if __name__ == "__main__":
 
 
 ```
-from ollama_mcp_kun_kosci.fastapi import init_server, app
+from ai_kun_kosci.fastapi import init_server, app
 from service.config import Config
 import asyncio
 import uvicorn

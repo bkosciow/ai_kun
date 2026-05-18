@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, status
-from ollama_mcp_kun_kosci.aikun import AIKun
+from ai_kun_kosci.aikun import AIKun
 from pydantic import BaseModel
 from typing import Optional
 
