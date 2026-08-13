@@ -1,9 +1,45 @@
+from pathlib import Path
+
 from fastmcp import Client as MCPClient
+from fastmcp.client.transports import StdioTransport
+from fastmcp.client.client import CallToolResult
+from mcp.types import ImageContent, TextContent
 from openai import OpenAI
 import json
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _make_client(transport: str):
+    if Path(transport).exists() and not transport.endswith(('.py', '.js')):
+        return MCPClient(StdioTransport(command=transport, args=[]))
+    return MCPClient(transport)
+
+
+def _parse_tool_result(result):
+    """Convert a fastmcp CallToolResult into OpenAI message content blocks.
+
+    Returns a list of content dicts suitable for the 'content' field of a message.
+    Images become image_url blocks, text stays as text.
+    """
+    if not isinstance(result, CallToolResult):
+        return [{
+                "type": "text",
+                "text": json.dumps(result) if isinstance(result, dict) else str(result),
+            }]
+
+    blocks = []
+    for item in result.content:
+        if isinstance(item, ImageContent):
+            data_uri = f"data:{item.mimeType};base64,{item.data}"
+            blocks.append({"type": "image_url", "image_url": {"url": data_uri}})
+        elif isinstance(item, TextContent):
+            blocks.append({"type": "text", "text": item.text})
+        else:
+            blocks.append({"type": "text", "text": str(item)})
+
+    return blocks if blocks else [{"type": "text", "text": str(result)}]
 
 
 class AIKun:
@@ -22,7 +58,7 @@ class AIKun:
         self.mcps = mcps
 
     async def load_mcp(self, mcp_url: str):
-        async with MCPClient(mcp_url) as mcp:
+        async with _make_client(mcp_url) as mcp:
             tools_list = await mcp.list_tools()
             for tool in tools_list:
                 self.url_to_tool[tool.name] = mcp_url
@@ -49,16 +85,20 @@ class AIKun:
                 tool_name,
                 tool_args
             )
+            content = _parse_tool_result(tool_response)
+            # Use string for text-only, list for multimodal
+            if len(content) == 1 and content[0]["type"] == "text":
+                content = content[0]["text"]
             messages.append({
                 "tool_call_id": tc.id,
                 "role": "tool",
-                "content": json.dumps(tool_response) if isinstance(tool_response, dict) else str(tool_response),
+                "content": content,
             })
         return messages
 
     async def call_tool(self, url: str, tool_name: str, args: dict):
         try:
-            async with MCPClient(url) as mcp:
+            async with _make_client(url) as mcp:
                 result = await mcp.call_tool(tool_name, args)
                 return result
         except Exception as e:

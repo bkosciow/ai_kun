@@ -15,7 +15,8 @@ async def main(content):
     )
 
     await assistant.load_mcps([
-        "http://192.168.1.40:11000/mcp"
+        "http://192.168.1.40:11000/mcp",
+        "/home/kosci/services/camera_mcp/.venv/bin/camera-mcp-mcp"
     ])
 
     msg = await assistant.query(content)
@@ -28,5 +29,6 @@ async def main(content):
 
 if __name__ == "__main__":
     # user_msg = "Hi, what's up?"
-    user_msg = "What is current time ?"
+    # user_msg = "What is current time ?"
+    user_msg = "What can you see?"
     asyncio.run(main(user_msg))
