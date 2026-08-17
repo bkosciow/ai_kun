@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastmcp import Client as MCPClient
-from fastmcp.client.transports import StdioTransport
+from fastmcp.client.transports import SSETransport, StdioTransport, StreamableHttpTransport
 from fastmcp.client.client import CallToolResult
 from mcp.types import ImageContent, TextContent
 from openai import OpenAI
@@ -11,10 +11,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _make_client(transport: str):
+def _make_client(transport: str, token: str | None = None):
     if Path(transport).exists() and not transport.endswith(('.py', '.js')):
         return MCPClient(StdioTransport(command=transport, args=[]))
-    return MCPClient(transport)
+    if token is not None:
+        if transport.endswith('/sse'):
+            return MCPClient(SSETransport(url=transport, auth=token))
+        return MCPClient(StreamableHttpTransport(url=transport, auth=token))
+    return MCPClient(transport, )
 
 
 def _parse_tool_result(result):
@@ -50,6 +54,7 @@ class AIKun:
         self.client = OpenAI(base_url=server_url, api_key=api_key)
         self.tools = []
         self.url_to_tool = {}
+        self.url_to_token = {}
         self.mcps = []
 
     async def load_mcps(self, mcps: list=[]):
@@ -57,9 +62,18 @@ class AIKun:
             await self.load_mcp(mcp)
         self.mcps = mcps
 
-    async def load_mcp(self, mcp_url: str):
-        async with _make_client(mcp_url) as mcp:
+    async def load_mcp(self, mcp_cfg: str | dict):
+        mcp_token = None
+        if isinstance(mcp_cfg, str):
+            mcp_url = mcp_cfg
+        else:
+            mcp_url = mcp_cfg['url']
+            mcp_token = mcp_cfg['token'] if 'token' in mcp_cfg else None
+
+        logger.debug(f"Loading MCP {mcp_url} (token={'set' if mcp_token else 'none'})")
+        async with _make_client(mcp_url, mcp_token) as mcp:
             tools_list = await mcp.list_tools()
+            self.url_to_token[mcp_url] = mcp_token
             for tool in tools_list:
                 self.url_to_tool[tool.name] = mcp_url
                 self.tools.append({
@@ -74,6 +88,7 @@ class AIKun:
     async def clear_mcps(self):
         self.tools = []
         self.url_to_tool = {}
+        self.url_to_token = {}
 
     async def handle_tools(self, tool_calls: list):
         messages = []
@@ -98,7 +113,8 @@ class AIKun:
 
     async def call_tool(self, url: str, tool_name: str, args: dict):
         try:
-            async with _make_client(url) as mcp:
+            token = self.url_to_token.get(url)
+            async with _make_client(url, token) as mcp:
                 result = await mcp.call_tool(tool_name, args)
                 return result
         except Exception as e:

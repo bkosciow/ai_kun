@@ -33,8 +33,8 @@ Before requests work, `init_server(server_url, apikey, model, mcps)` must be cal
 ## Architecture Notes
 
 - `AIKun` constructor: `AIKun(server_url, api_key, model, session_manager=None)` — uses `openai.OpenAI(base_url=server_url, api_key=api_key)`
-- **MCP transport**: `_make_client(transport)` auto-detects the transport type — a local file path (not `.py`/`.js`) uses `StdioTransport`, everything else (URLs) uses the default HTTP transport
-- **Tool loading**: `load_mcps(urls)` delegates to per-server `load_mcp(url)`, which uses `async with` for proper connection lifecycle. `clear_mcps()` resets tools and mappings
+- **MCP transport**: `_make_client(transport, token=None)` auto-detects the transport type — a local file path (not `.py`/`.js`) uses `StdioTransport`, everything else (URLs) uses the default HTTP transport. With a token it builds `StreamableHttpTransport(url, auth=token)` (or `SSETransport` for `/sse` URLs), which sends `Authorization: Bearer <token>`
+- **Tool loading**: `load_mcps(mcps)` accepts plain URL strings or `{url, token}` dicts, delegates to per-server `load_mcp()`, which uses `async with` for proper connection lifecycle. Per-URL tokens are stored in `url_to_token` so `call_tool()` re-authenticates when it opens a fresh connection per call. `clear_mcps()` resets tools, mappings, and tokens
 - **Multimodal tool responses**: `_parse_tool_result()` converts `fastmcp CallToolResult` into OpenAI message content blocks — `ImageContent` becomes `image_url` data URI blocks, `TextContent` stays as text. `handle_tools()` uses a plain string for single-text results and a list for multimodal content
 - **`query()` flow**: send prompt via OpenAI SDK with tool definitions → if the model requests tool calls, execute each via `fastmcp.Client` (creates a new connection per call at `aikun.py:99`) → parse results as multimodal content → send follow-up call with full conversation context → return the message object
 - **`query()` return**: the raw OpenAI message object with `.role`, `.content`, and optionally `.tool_calls`

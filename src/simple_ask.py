@@ -16,8 +16,9 @@ async def main(content):
 
     await assistant.load_mcps([
         "http://192.168.1.40:11000/mcp",
-        "/home/kosci/services/camera_mcp/.venv/bin/camera-mcp-mcp"
-    ])
+        {"url": "http://192.168.1.40:11001/mcp", "token": "aabbcc"}
+        ]
+    )
 
     msg = await assistant.query(content)
 
