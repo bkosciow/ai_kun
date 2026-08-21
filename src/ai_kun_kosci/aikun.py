@@ -71,19 +71,23 @@ class AIKun:
             mcp_token = mcp_cfg['token'] if 'token' in mcp_cfg else None
 
         logger.debug(f"Loading MCP {mcp_url} (token={'set' if mcp_token else 'none'})")
-        async with _make_client(mcp_url, mcp_token) as mcp:
-            tools_list = await mcp.list_tools()
-            self.url_to_token[mcp_url] = mcp_token
-            for tool in tools_list:
-                self.url_to_tool[tool.name] = mcp_url
-                self.tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "parameters": tool.inputSchema,
-                    },
-                })
+        try:
+            async with _make_client(mcp_url, mcp_token) as mcp:
+                tools_list = await mcp.list_tools()
+
+                self.url_to_token[mcp_url] = mcp_token
+                for tool in tools_list:
+                    self.url_to_tool[tool.name] = mcp_url
+                    self.tools.append({
+                        "type": "function",
+                        "function": {
+                            "name": tool.name,
+                            "description": tool.description,
+                            "parameters": tool.inputSchema,
+                        },
+                    })
+        except Exception as e:
+            logger.error(f"Failed to load MCP {mcp_url}, skipping: {e}")
 
     async def clear_mcps(self):
         self.tools = []
